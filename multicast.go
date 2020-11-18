@@ -1,83 +1,111 @@
 package main
 
 import (
-	"fmt"
-	"math/rand"
+	"errors"
 	"sync"
-	"time"
 )
 
-const bufLength = 2
+// cannot use const... wth, how can I define error constants (or at least readonly variables) in go?
+var errorOutputBufLen = errors.New("outputBufLen is invalid")
+var errorConsumerCount = errors.New("consumerCount is invalid")
+var errorInvalidCallBack = errors.New("consumer or producer callback is invalid")
+var errorUsedMultiCast = errors.New("multicast already used, cannot start again")
 
-// 1 v n multicast
-func multicast(wg *sync.WaitGroup, producer func(chan<- int), consumer func(int, <-chan int), consumerCount int) {
+// MultiCast struct
+type MultiCast struct {
+	chIn         chan int
+	chOuts       []chan int
+	outputBufLen int
+	consumerCnt  int
+	wg           sync.WaitGroup
+	used         bool
+}
+
+// NewMultiCast initializes a new NewMultiCast object
+func NewMultiCast(outputBufLen int, consumerCount int) (*MultiCast, error) {
+	if outputBufLen <= 0 {
+		return nil, errorOutputBufLen
+	}
+	if consumerCount <= 0 {
+		return nil, errorConsumerCount
+	}
 	chIn := make(chan int)
 	chOuts := make([]chan int, consumerCount)
-	ret := make([]<-chan int, consumerCount)
 	for i := range chOuts {
-		chOuts[i] = make(chan int, bufLength)
-		ret[i] = chOuts[i]
+		chOuts[i] = make(chan int, outputBufLen)
 	}
 
+	return &MultiCast{
+		chIn:         chIn,
+		chOuts:       chOuts,
+		outputBufLen: outputBufLen,
+		consumerCnt:  consumerCount,
+		used:         false,
+	}, nil
+}
+
+// Run starts the multi casting logic for the given producer and consumer
+func (mc *MultiCast) Run(producer func(chan<- int), consumer func(int, <-chan int)) error {
+	if mc.used {
+		return errorUsedMultiCast
+	}
+
+	if producer == nil || consumer == nil {
+		return errorInvalidCallBack
+	}
+
+	wg := &mc.wg
+
 	// start consumers
-	for i, cho := range chOuts {
+	for i, cho := range mc.chOuts {
 		// avoiding closure on loop variables
 		id, ch := i, cho
 		wg.Add(1)
-		go func() {
-			consumer(id, ch)
-			wg.Done()
-		}()
+		go mc.consume(consumer, id, ch)
 	}
 
 	// start producer
 	wg.Add(1)
-	go func() {
-		producer(chIn)
-		close(chIn)
-		wg.Done()
-	}()
+	go mc.produce(producer)
 
-	// start multicasting
+	// start casting
 	wg.Add(1)
-	go func() {
-		for v := range chIn {
-			for _, cho := range chOuts {
-				select {
-				case cho <- v: // success
-				default: // full, get rid of oldest value and push new
-					<-cho
-					cho <- v
-				}
-			}
-		}
+	go mc.cast()
 
-		// close all output channels
-		for _, cho := range chOuts {
-			close(cho)
-		}
-
-		wg.Done()
-	}()
+	// if we reach here we are done
+	return nil
 }
 
-func multicastDemo() {
-	var wg sync.WaitGroup
-	multicast(
-		&wg,
-		func(ch chan<- int) {
-			for i := 0; i < 10; i++ {
-				ch <- i
-				time.Sleep(time.Duration(rand.Intn(1)) * time.Second)
+func (mc *MultiCast) produce(producer func(chan<- int)) {
+	producer(mc.chIn)
+
+	// close channel and signal done
+	close(mc.chIn)
+	mc.wg.Done()
+}
+
+func (mc *MultiCast) consume(consumer func(int, <-chan int), id int, ch chan int) {
+	consumer(id, ch)
+	// signal done
+	mc.wg.Done()
+}
+
+func (mc *MultiCast) cast() {
+	for v := range mc.chIn {
+		for _, cho := range mc.chOuts {
+			select {
+			case cho <- v: // success
+			default: // full, get rid of oldest value and push new
+				<-cho
+				cho <- v
 			}
-		},
-		func(id int, ch <-chan int) {
-			for v := range ch {
-				fmt.Printf("Consumer#%d processing %d\n", id, v)
-				time.Sleep(time.Duration(rand.Intn(10)) * time.Second)
-			}
-		},
-		2,
-	)
-	wg.Wait()
+		}
+	}
+
+	// close all output channels
+	for _, cho := range mc.chOuts {
+		close(cho)
+	}
+
+	mc.wg.Done()
 }

@@ -8,7 +8,7 @@ import (
 
 type workType struct {
 	name  string
-	entry func()
+	start func()
 }
 
 var workItems = []workType{
@@ -24,10 +24,11 @@ var workItems = []workType{
 		fmt.Println("World")
 	}},
 	{"ProducerConsumer", ProdConMain},
-	{"multicastDemo", multicastDemo},
+	{"MultiCast - eager producer", func() { multicastDemo(50, 200) }},
+	{"MultiCast - lazy producer", func() { multicastDemo(200, 50) }},
 }
 
-func selectWork() (int, error) {
+func selectWork() int {
 	start := 0
 	end := len(workItems) - 1
 	selection := -1
@@ -37,13 +38,12 @@ func selectWork() (int, error) {
 		fmt.Scanln(&str)
 		sel, err := strconv.Atoi(str)
 		if err != nil {
-			selection = -1
-		} else {
-			selection = sel
+			sel = -1
 		}
+		selection = sel
 	}
 
-	return selection, nil
+	return selection
 }
 
 func main() {
@@ -51,12 +51,10 @@ func main() {
 		fmt.Printf("%d: %s\n", i, v.name)
 	}
 
-	selection, err := selectWork()
-	if err != nil {
-		return
+	for {
+		selection := selectWork()
+		workItem := workItems[selection]
+		fmt.Printf("You selected %s, starting work\n", workItem.name)
+		workItem.start()
 	}
-
-	workItem := workItems[selection]
-	fmt.Printf("You selected %s, starting work\n", workItem.name)
-	workItem.entry()
 }
