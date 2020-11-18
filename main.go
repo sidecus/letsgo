@@ -24,8 +24,8 @@ var workItems = []workType{
 		fmt.Println("World")
 	}},
 	{"ProducerConsumer", ProdConMain},
-	{"MultiCast - eager producer", func() { multicastDemo(50, 200) }},
-	{"MultiCast - lazy producer", func() { multicastDemo(200, 50) }},
+	{"MultiCast - Eager writer", func() { multicastDemo(50, 200) }},
+	{"MultiCast - Lazy writer", func() { multicastDemo(200, 50) }},
 }
 
 func selectWork() int {
