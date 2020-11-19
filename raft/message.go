@@ -5,11 +5,11 @@ type MessageType string
 
 // allowed requestType values
 const (
-	MsgVote          = "Vote"
-	MsgElect         = "Elect"
+	MsgBallot        = "Ballot"
+	MsgElect         = "ElectSelf"
 	MsgHeartbeat     = "Heartbeat"
 	MsgStartElection = "StartElection" // dummy message to handle election timeout
-	MsgSendHeartBeat = "SendHeartbeat" // dummy message to send heart beat
+	MsgSendHeartBeat = "SendHeartbeat" // dummy message to send heartbeat
 )
 
 // Message object used by raft
@@ -29,15 +29,6 @@ func (node *Node) createElectMessage() *Message {
 	}
 }
 
-func (node *Node) createVoteMessage(electMsg *Message) *Message {
-	return &Message{
-		nodeID:  node.id,
-		term:    electMsg.term,
-		msgType: MsgVote,
-		data:    electMsg.nodeID,
-	}
-}
-
 func (node *Node) createStartElectionMessage() *Message {
 	return &Message{
 		nodeID:  node.id,
@@ -47,11 +38,29 @@ func (node *Node) createStartElectionMessage() *Message {
 	}
 }
 
+func (node *Node) createBallotMessage(electMsg *Message) *Message {
+	return &Message{
+		nodeID:  node.id,
+		term:    electMsg.term,
+		msgType: MsgBallot,
+		data:    electMsg.nodeID,
+	}
+}
+
 func (node *Node) createHeartBeatMessage() *Message {
 	return &Message{
 		nodeID:  node.id,
 		term:    node.term,
 		msgType: MsgHeartbeat,
+		data:    node.id,
+	}
+}
+
+func (node *Node) createSendHeartBeatMessage() *Message {
+	return &Message{
+		nodeID:  node.id,
+		term:    node.term,
+		msgType: MsgSendHeartBeat,
 		data:    node.id,
 	}
 }

@@ -54,8 +54,8 @@ func main() {
 	}
 
 	for {
-		selection := selectWork()
-		//selection := 8
+		//selection := selectWork()
+		selection := 8
 		workItem := workItems[selection]
 		fmt.Printf("You selected %s, starting work\n", workItem.name)
 		workItem.start()
