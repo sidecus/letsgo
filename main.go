@@ -26,6 +26,7 @@ var workItems = []workType{
 	{"ProducerConsumer", ProdConMain},
 	{"MultiCast - Eager writer", func() { multicastDemo(50, 200) }},
 	{"MultiCast - Lazy writer", func() { multicastDemo(200, 50) }},
+	{"RaftDemo", raftDemo},
 }
 
 func selectWork() int {
