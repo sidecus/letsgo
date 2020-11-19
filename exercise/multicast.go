@@ -1,4 +1,4 @@
-package main
+package exercise
 
 import (
 	"errors"
@@ -54,6 +54,12 @@ func (mc *MultiCast) cast() {
 			case chr <- v: // success
 			default:
 				// buffer full, get rid of oldest value and push new
+				// TODO[sidecus]: this is not a good pattern, there is a potential "deadlocking" with the draining.
+				// 1. Current goroutine cannot write to channel since it's full
+				// 2. reader reads all data out
+				// 3. current goroutine starts draining
+				// blocked from both sides
+				// The draining should be non-blocking (it will work since current goroutine is the sole writer)
 				<-chr
 				chr <- v
 			}

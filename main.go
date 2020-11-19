@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/sidecus/letsgo/exercise"
 	"runtime"
 	"strconv"
 )
@@ -12,9 +13,9 @@ type workType struct {
 }
 
 var workItems = []workType{
-	{"Crawler", CrawlerMain},
-	{"BSTComparison", BSTComparisonMain},
-	{"Web Server", WebStartUp},
+	{"Crawler", exercise.CrawlerMain},
+	{"BSTComparison", exercise.BSTComparisonMain},
+	{"Web Server", exercise.WebStartUp},
 	{"CPUNumber", func() {
 		fmt.Println(runtime.NumCPU())
 	}},
@@ -23,9 +24,9 @@ var workItems = []workType{
 		defer fmt.Println("!")
 		fmt.Println("World")
 	}},
-	{"ProducerConsumer", ProdConMain},
-	{"MultiCast - Eager writer", func() { multicastDemo(50, 200) }},
-	{"MultiCast - Lazy writer", func() { multicastDemo(200, 50) }},
+	{"ProducerConsumer", exercise.ProdConMain},
+	{"MultiCast - Eager writer", func() { exercise.MulticastDemo(50, 200) }},
+	{"MultiCast - Lazy writer", func() { exercise.MulticastDemo(200, 50) }},
 	{"RaftDemo", raftDemo},
 }
 
@@ -54,6 +55,7 @@ func main() {
 
 	for {
 		selection := selectWork()
+		//selection := 8
 		workItem := workItems[selection]
 		fmt.Printf("You selected %s, starting work\n", workItem.name)
 		workItem.start()

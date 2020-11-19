@@ -29,6 +29,7 @@ func CreateChannelNetwork(n int) (*ChannelNetwork, error) {
 	}
 	channels := make([]chan *Message, n)
 	for i := range channels {
+		// non buffered channel to mimic unrealiable network
 		channels[i] = make(chan *Message)
 	}
 
@@ -52,12 +53,10 @@ func (mb *ChannelNetwork) Send(sourceNodeID int, targetNodID int, msg *Message) 
 	}
 
 	ch := mb.channels[targetNodID]
+	// nonblocking lossy sending
 	select {
 	case ch <- msg:
 	default:
-		// nonblock lossy sending, new message takes priority
-		<-ch
-		ch <- msg
 	}
 
 	return nil

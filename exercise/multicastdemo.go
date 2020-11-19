@@ -1,4 +1,4 @@
-package main
+package exercise
 
 import (
 	"fmt"
@@ -7,7 +7,8 @@ import (
 	"time"
 )
 
-func multicastDemo(maxWriterSleepMs int, maxReaderSleepMs int) {
+// MulticastDemo shows channel based multi cast
+func MulticastDemo(maxWriterSleepMs int, maxReaderSleepMs int) {
 	var wg sync.WaitGroup
 	readerCnt, bufferLen := 3, 2
 
