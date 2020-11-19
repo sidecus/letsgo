@@ -5,9 +5,9 @@ import (
 	"time"
 )
 
-const minElectionTimeoutMs = 2500 // millisecond
-const maxElectionTimeoutMs = 4000 // millisecond
-const heartbeatTimeoutMs = 2600   // millisecond, larger value so that we can mimic some failures
+const minElectionTimeoutMs = 3500 // millisecond
+const maxElectionTimeoutMs = 5000 // millisecond
+const heartbeatTimeoutMs = 3600   // millisecond, larger value so that we can mimic some failures
 
 // NodeState - node state type, can be one of 3: follower, candidate or leader
 type NodeState int
@@ -45,7 +45,7 @@ type Node struct {
 	electionTimer  *time.Timer // timer for election timeout, used by follower and candidate
 	heartbeatTimer *time.Timer // timer for heartbeat, used by leader
 	recvChannel    chan *Message
-	sm             nodeStateMachine
+	sm             NodeStateMachine
 }
 
 // CreateNode creates a new node
@@ -97,7 +97,7 @@ func (node *Node) heartbeat() {
 
 // processMessage passes the message through the node statemachine
 func (node *Node) processMessage(msg *Message) {
-	node.sm.processMessage(node, msg)
+	node.sm.ProcessMessage(node, msg)
 }
 
 // State returns the node's current state
@@ -139,6 +139,7 @@ func (node *Node) Elect() bool {
 	for i := range node.votes {
 		node.votes[i] = false
 	}
+	// vote for self directly
 	node.votes[node.id] = true
 	node.term++
 	node.lastVotedTerm = node.term
@@ -160,7 +161,7 @@ func (node *Node) Vote(electMsg *Message) bool {
 	return false
 }
 
-// CountBallots counts ballots received and switch to leader if we win
+// CountBallots counts ballots received and decide whether we win
 func (node *Node) CountBallots(ballotMsg *Message) bool {
 	if ballotMsg.data == node.id && ballotMsg.term == node.term {
 		node.votes[ballotMsg.nodeID] = true

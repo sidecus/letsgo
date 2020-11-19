@@ -9,19 +9,24 @@ const (
 	timerReset = 2
 )
 
-type msgHandler struct {
+// MsgHandler defines a message handler struct
+type MsgHandler struct {
 	handle               func(INode, *Message) bool
 	nextState            NodeState
 	electTimerAction     TimerAction
 	heartbeatTimerAction TimerAction
 }
-type msgHandlerMap map[MessageType]msgHandler
-type nodeStateMachine map[NodeState]msgHandlerMap
 
-// processMessage runs a message through the node state machine
-// if message is handled and state change required, it'll perform the needed work
+//MsgHandlerMap defines map of message type to handler
+type MsgHandlerMap map[MessageType]MsgHandler
+
+// NodeStateMachine defines map from state to MsgHandlerMap
+type NodeStateMachine map[NodeState]MsgHandlerMap
+
+// ProcessMessage runs a message through the node state machine
+// if message is handled and state change required, it'll perform other needed work
 // including state change and timer stop/reset
-func (nodesm nodeStateMachine) processMessage(node INode, msg *Message) {
+func (nodesm NodeStateMachine) ProcessMessage(node INode, msg *Message) {
 	handlerMap, validState := nodesm[node.State()]
 	if !validState {
 		panic("Invalid state for node %d")
@@ -29,7 +34,7 @@ func (nodesm nodeStateMachine) processMessage(node INode, msg *Message) {
 
 	handler, hasHandler := handlerMap[msg.msgType]
 	if hasHandler && handler.handle != nil && handler.handle(node, msg) {
-		// change state
+		// set new state
 		node.SetState(handler.nextState)
 
 		// update election timer
@@ -69,7 +74,7 @@ func handleElectMsg(node INode, msg *Message) bool {
 }
 
 // RaftNodeSM is the predefined node state machine
-var RaftNodeSM = nodeStateMachine{
+var RaftNodeSM = NodeStateMachine{
 	follower: {
 		MsgStartElection: {
 			handle:               handleStartElection,
