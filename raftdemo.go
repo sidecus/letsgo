@@ -2,19 +2,19 @@ package main
 
 import (
 	"fmt"
-	"github.com/sidecus/letsgo/raft"
 	"log"
 	"runtime"
+
+	"github.com/sidecus/letsgo/raft"
 )
 
-// TODO[sidecus]: switch to log.Default when new Go version is out
-var logger = log.New(log.Writer(), log.Prefix(), log.Flags())
-
 func raftDemo() {
-	var clusterSize = runtime.NumCPU()
+	var clusterSize = runtime.NumCPU() - 1
+
+	// TODO[sidecus]: switch to log.Default when new Go version is out
+	logger := log.New(log.Writer(), log.Prefix(), log.Flags())
+	network, _ := raft.CreateDummyNetwork(clusterSize)
 
 	fmt.Printf("Starting a %d node raft cluster\n", clusterSize)
-
-	network, _ := raft.CreateChannelNetwork(clusterSize)
-	raft.StartCluster(clusterSize, network, logger)
+	raft.Start(clusterSize, network, logger)
 }

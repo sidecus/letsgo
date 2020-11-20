@@ -7,30 +7,24 @@ import (
 
 // Cluster manages the raft cluster
 type Cluster struct {
-	size    int
-	nodes   []INode
-	network Network
-	logger  *log.Logger
+	size  int
+	nodes []INode
 }
 
-// StartCluster creates and starts a raft cluster with the given number of nodes on the network
-func StartCluster(size int, network Network, logger *log.Logger) {
+// Start creates and starts a raft cluster with the given number of nodes on the network
+func Start(size int, network Network, logger *log.Logger) {
 	nodes := make([]INode, size)
 	cluster := &Cluster{
-		size:    size,
-		nodes:   nodes,
-		network: network,
-		logger:  logger,
+		size:  size,
+		nodes: nodes,
 	}
 
 	var wg sync.WaitGroup
 
 	// Create nodes and start them
 	for i := range nodes {
-		recvCh, _ := network.GetChannel(i)
-		nodes[i] = CreateNode(cluster, i, recvCh)
-
 		wg.Add(1)
+		nodes[i] = CreateNode(i, cluster, network, logger)
 		nodes[i].Start()
 	}
 

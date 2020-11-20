@@ -1,36 +1,36 @@
 package raft
 
-// MessageType type used by raft
-type MessageType string
+// raftMessageType message type used by raft nodes
+type raftMessageType string
 
-// allowed requestType values
+// allowed raftMessageType values
 const (
-	MsgBallot        = "Ballot"
-	MsgElect         = "ElectSelf"
+	MsgVote          = "Vote"
+	MsgRequestVote   = "RequestVote"
 	MsgHeartbeat     = "Heartbeat"
-	MsgStartElection = "StartElection" // dummy message to handle election timeout
+	MsgStartElection = "StartElection" // dummy message to handle new election
 	MsgSendHeartBeat = "SendHeartbeat" // dummy message to send heartbeat
 )
 
-// Message object used by raft
-type Message struct {
+// raftMessage object used by raft
+type raftMessage struct {
 	nodeID  int
 	term    int
-	msgType MessageType
+	msgType raftMessageType
 	data    int
 }
 
-func (node *Node) createElectMessage() *Message {
-	return &Message{
+func (node *Node) createRequestVoteMessage() *raftMessage {
+	return &raftMessage{
 		nodeID:  node.id,
 		term:    node.term,
-		msgType: MsgElect,
+		msgType: MsgRequestVote,
 		data:    node.id,
 	}
 }
 
-func (node *Node) createStartElectionMessage() *Message {
-	return &Message{
+func (node *Node) createStartElectionMessage() *raftMessage {
+	return &raftMessage{
 		nodeID:  node.id,
 		term:    node.term,
 		msgType: MsgStartElection,
@@ -38,17 +38,17 @@ func (node *Node) createStartElectionMessage() *Message {
 	}
 }
 
-func (node *Node) createBallotMessage(electMsg *Message) *Message {
-	return &Message{
+func (node *Node) createVoteMessage(electMsg *raftMessage) *raftMessage {
+	return &raftMessage{
 		nodeID:  node.id,
 		term:    electMsg.term,
-		msgType: MsgBallot,
+		msgType: MsgVote,
 		data:    electMsg.nodeID,
 	}
 }
 
-func (node *Node) createHeartBeatMessage() *Message {
-	return &Message{
+func (node *Node) createHeartBeatMessage() *raftMessage {
+	return &raftMessage{
 		nodeID:  node.id,
 		term:    node.term,
 		msgType: MsgHeartbeat,
@@ -56,8 +56,8 @@ func (node *Node) createHeartBeatMessage() *Message {
 	}
 }
 
-func (node *Node) createSendHeartBeatMessage() *Message {
-	return &Message{
+func (node *Node) createSendHeartBeatMessage() *raftMessage {
+	return &raftMessage{
 		nodeID:  node.id,
 		term:    node.term,
 		msgType: MsgSendHeartBeat,

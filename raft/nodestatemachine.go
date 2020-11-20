@@ -1,32 +1,32 @@
 package raft
 
-// TimerAction is the action we want to take on the given timer
-type TimerAction int
+// timerAction is the action we want to take on the given timer
+type timerAction int
 
 const (
-	timerNoop  = 0
-	timerStop  = 1
-	timerReset = 2
+	timerActionNoop  = 0
+	timerActionStop  = 1
+	timerActionReset = 2
 )
 
-// MsgHandler defines a message handler struct
-type MsgHandler struct {
-	handle               func(INode, *Message) bool
+// raftMsgHandler defines a message handler struct
+type raftMsgHandler struct {
+	handle               func(INode, *raftMessage) bool
 	nextState            NodeState
-	electTimerAction     TimerAction
-	heartbeatTimerAction TimerAction
+	electTimerAction     timerAction
+	heartbeatTimerAction timerAction
 }
 
-//MsgHandlerMap defines map of message type to handler
-type MsgHandlerMap map[MessageType]MsgHandler
+//raftMsgHandlerMap defines map of message type to handler
+type raftMsgHandlerMap map[raftMessageType]raftMsgHandler
 
-// NodeStateMachine defines map from state to MsgHandlerMap
-type NodeStateMachine map[NodeState]MsgHandlerMap
+// nodeStateMachine defines map from state to MsgHandlerMap
+type nodeStateMachine map[NodeState]raftMsgHandlerMap
 
 // ProcessMessage runs a message through the node state machine
-// if message is handled and state change required, it'll perform other needed work
-// including state change and timer stop/reset
-func (nodesm NodeStateMachine) ProcessMessage(node INode, msg *Message) {
+// if message is handled and state change is required, it'll perform other needed work
+// including advancing node state and stoping/reseting related timers
+func (nodesm nodeStateMachine) ProcessMessage(node INode, msg *raftMessage) {
 	handlerMap, validState := nodesm[node.State()]
 	if !validState {
 		panic("Invalid state for node %d")
@@ -38,101 +38,107 @@ func (nodesm NodeStateMachine) ProcessMessage(node INode, msg *Message) {
 		node.SetState(handler.nextState)
 
 		// update election timer
-		if handler.electTimerAction == timerStop {
+		if handler.electTimerAction == timerActionStop {
 			node.StopElectionTimer()
-		} else if handler.electTimerAction == timerReset {
+		} else if handler.electTimerAction == timerActionReset {
 			node.ResetElectionTimer()
 		}
 
 		// update heartbreat timer
-		if handler.heartbeatTimerAction == timerStop {
+		if handler.heartbeatTimerAction == timerActionStop {
 			node.StopHeartbeatTimer()
-		} else if handler.heartbeatTimerAction == timerReset {
+		} else if handler.heartbeatTimerAction == timerActionReset {
 			node.ResetHeartbeatTimer()
 		}
 	}
 }
 
-func handleStartElection(node INode, msg *Message) bool {
-	return node.Elect()
+func handleStartElection(node INode, msg *raftMessage) bool {
+	return node.StartElection()
 }
 
-func handleSendHearbeat(node INode, msg *Message) bool {
+func handleSendHearbeat(node INode, msg *raftMessage) bool {
 	return node.SendHeartbeat()
 }
 
-func handleHeartbeat(node INode, msg *Message) bool {
+func handleHeartbeat(node INode, msg *raftMessage) bool {
 	return node.AckHeartbeat(msg)
 }
 
-func handleBallotMsg(node INode, msg *Message) bool {
-	return node.CountBallots(msg)
+func handleVoteMsg(node INode, msg *raftMessage) bool {
+	return node.CountVotes(msg)
 }
 
-func handleElectMsg(node INode, msg *Message) bool {
+func handleRequestVoteMsg(node INode, msg *raftMessage) bool {
 	return node.Vote(msg)
 }
 
-// RaftNodeSM is the predefined node state machine
-var RaftNodeSM = NodeStateMachine{
+// raftNodeSM is the predefined node state machine
+var raftNodeSM = nodeStateMachine{
 	follower: {
 		MsgStartElection: {
 			handle:               handleStartElection,
 			nextState:            candidate,
-			electTimerAction:     timerReset,
-			heartbeatTimerAction: timerStop,
+			electTimerAction:     timerActionReset,
+			heartbeatTimerAction: timerActionStop,
 		},
 		MsgHeartbeat: {
 			handle:               handleHeartbeat,
 			nextState:            follower,
-			electTimerAction:     timerReset,
-			heartbeatTimerAction: timerStop,
+			electTimerAction:     timerActionReset,
+			heartbeatTimerAction: timerActionStop,
 		},
-		MsgElect: {
-			handle:               handleElectMsg,
+		MsgRequestVote: {
+			handle:               handleRequestVoteMsg,
 			nextState:            follower,
-			electTimerAction:     timerNoop,
-			heartbeatTimerAction: timerNoop,
+			electTimerAction:     timerActionNoop,
+			heartbeatTimerAction: timerActionNoop,
 		},
 	},
 	candidate: {
 		MsgStartElection: {
 			handle:               handleStartElection,
 			nextState:            candidate,
-			electTimerAction:     timerReset,
-			heartbeatTimerAction: timerStop,
+			electTimerAction:     timerActionReset,
+			heartbeatTimerAction: timerActionStop,
 		},
 		MsgHeartbeat: {
 			handle:               handleHeartbeat,
 			nextState:            follower,
-			electTimerAction:     timerReset,
-			heartbeatTimerAction: timerStop,
+			electTimerAction:     timerActionReset,
+			heartbeatTimerAction: timerActionStop,
 		},
-		MsgElect: {
-			handle:               handleElectMsg,
+		MsgRequestVote: {
+			handle:               handleRequestVoteMsg,
 			nextState:            follower,
-			electTimerAction:     timerNoop,
-			heartbeatTimerAction: timerNoop,
+			electTimerAction:     timerActionNoop,
+			heartbeatTimerAction: timerActionNoop,
 		},
-		MsgBallot: {
-			handle:               handleBallotMsg,
+		MsgVote: {
+			handle:               handleVoteMsg,
 			nextState:            leader,
-			electTimerAction:     timerStop,
-			heartbeatTimerAction: timerReset,
+			electTimerAction:     timerActionStop,
+			heartbeatTimerAction: timerActionReset,
 		},
 	},
 	leader: {
 		MsgSendHeartBeat: {
 			handle:               handleSendHearbeat,
 			nextState:            leader,
-			electTimerAction:     timerStop,
-			heartbeatTimerAction: timerReset,
+			electTimerAction:     timerActionStop,
+			heartbeatTimerAction: timerActionReset,
 		},
 		MsgHeartbeat: {
 			handle:               handleHeartbeat,
 			nextState:            follower,
-			electTimerAction:     timerReset,
-			heartbeatTimerAction: timerStop,
+			electTimerAction:     timerActionReset,
+			heartbeatTimerAction: timerActionStop,
+		},
+		MsgRequestVote: {
+			handle:               handleRequestVoteMsg,
+			nextState:            follower,
+			electTimerAction:     timerActionNoop,
+			heartbeatTimerAction: timerActionNoop,
 		},
 	},
 }
