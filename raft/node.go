@@ -143,7 +143,7 @@ func (node *Node) Elect() bool {
 	node.ballots[node.id] = true
 	node.term++
 	node.lastVotedTerm = node.term
-	node.cluster.logger.Printf("\u2610 T%d: Node%d starts election...\n", node.term, node.id)
+	node.cluster.logger.Printf("\u270b T%d: Node%d starts election...\n", node.term, node.id)
 	node.cluster.network.Broadcast(node.id, node.createElectMessage())
 
 	return true
@@ -153,7 +153,7 @@ func (node *Node) Elect() bool {
 func (node *Node) Vote(electMsg *Message) bool {
 	if electMsg.term > node.term && electMsg.term > node.lastVotedTerm {
 		node.lastVotedTerm = electMsg.term
-		node.cluster.logger.Printf("\u2611 T%d: Node%d votes for Node%d \n", electMsg.term, node.id, electMsg.nodeID)
+		node.cluster.logger.Printf("\U0001f4e7 T%d: Node%d votes for Node%d \n", electMsg.term, node.id, electMsg.nodeID)
 		node.cluster.network.Send(node.id, electMsg.nodeID, node.createBallotMessage(electMsg))
 		return true
 	}
@@ -175,7 +175,7 @@ func (node *Node) CountBallots(ballotMsg *Message) bool {
 
 		if totalVotes > node.cluster.size/2 {
 			// Won election, start heartbeat
-			node.cluster.logger.Printf("\u2605 T%d: Node%d wins election (%d votes)\n", node.term, node.id, totalVotes)
+			node.cluster.logger.Printf("\u2705 T%d: Node%d wins election (%d votes)\n", node.term, node.id, totalVotes)
 			node.heartbeat()
 			return true
 		}
@@ -188,7 +188,7 @@ func (node *Node) CountBallots(ballotMsg *Message) bool {
 func (node *Node) AckHeartbeat(hbMsg *Message) bool {
 	// handle heartbeat message with the same or newer term
 	if hbMsg.term >= node.term {
-		node.cluster.logger.Printf("\u2661 T%d: Node%d -> Node%d\n", hbMsg.term, hbMsg.nodeID, node.id)
+		node.cluster.logger.Printf("\U0001f493 T%d: Node%d <- Node%d\n", hbMsg.term, node.id, hbMsg.nodeID)
 		node.term = hbMsg.term
 		return true
 	}
