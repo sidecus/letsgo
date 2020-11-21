@@ -2,7 +2,7 @@ package raft
 
 import "time"
 
-// stop and drain the timer
+// stopTimer stops and drains the timer - please make sure timer channel doesn't have others listening to it
 func stopTimer(timer *time.Timer) {
 	if !timer.Stop() {
 		// The Timer document is inaccurate with a bad exmaple - timer.Stop returning false doesn't necessarily
@@ -15,4 +15,10 @@ func stopTimer(timer *time.Timer) {
 		default:
 		}
 	}
+}
+
+// resetTimer resets the timer with a new duration
+func resetTimer(timer *time.Timer, d time.Duration) {
+	stopTimer(timer)
+	timer.Reset(d)
 }

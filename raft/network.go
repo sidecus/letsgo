@@ -4,8 +4,8 @@ import (
 	"errors"
 )
 
-// Network interfaces defines the interface for the underlying communication among nodes
-type Network interface {
+// INetwork interfaces defines the interface for the underlying communication among nodes
+type INetwork interface {
 	Send(sourceNodeID int, targetNodID int, msg *raftMessage) error
 	Broadcast(sourceNodeID int, msg *raftMessage) error
 	GetRecvChannel(nodeID int) (chan *raftMessage, error)
@@ -19,74 +19,71 @@ var errorInvalidMessage = errors.New("message is invalid")
 // boradcastAddress is a special NodeId representing broadcasting to all other nodes
 const boradcastAddress = -1
 
-// dummyNetworkRequest request type used by channelNetwork internally to send raftMessage to nodes
-type dummyNetworkRequest struct {
+// channelNetworkReq request type used by channelNetworkReq internally to send raftMessage to nodes
+type channelNetworkReq struct {
 	sender   int
 	receiver int
 	message  *raftMessage
 }
 
-// dummyNetwork is a channel based network implementation without real RPC calls
-type dummyNetwork struct {
-	size         int
-	chSend       chan dummyNetworkRequest
-	nodeChannels []chan *raftMessage
+// channelNetwork is a channel based network implementation without real RPC calls
+type channelNetwork struct {
+	size  int
+	cin   chan channelNetworkReq
+	couts []chan *raftMessage
 }
 
-// CreateDummyNetwork creates a channel based network
-func CreateDummyNetwork(n int) (Network, error) {
+// CreateChannelNetwork creates a channelNetwork (local machine channel based network)
+// and starts it. It mimics real network behavior by retrieving requests from cin and dispatch to couts
+func CreateChannelNetwork(n int) (INetwork, error) {
 	if n <= 0 || n > 1024 {
 		return nil, errorInvalidNodeCount
 	}
 
-	chSend := make(chan dummyNetworkRequest, 100)
-	nodeChannels := make([]chan *raftMessage, n)
-	for i := range nodeChannels {
+	cin := make(chan channelNetworkReq, 100)
+	couts := make([]chan *raftMessage, n)
+	for i := range couts {
 		// non buffered channel to mimic unrealiable network
-		nodeChannels[i] = make(chan *raftMessage)
+		couts[i] = make(chan *raftMessage)
 	}
 
-	network := &dummyNetwork{
-		size:         n,
-		chSend:       chSend,
-		nodeChannels: nodeChannels,
+	net := &channelNetwork{
+		size:  n,
+		cin:   cin,
+		couts: couts,
 	}
 
-	// start the network
-	go network.start()
+	// start the network, which reads from cin and dispatches to one or more couts
+	go func() {
+		for r := range net.cin {
+			if r.receiver != boradcastAddress {
+				net.sendToNode(r.receiver, r.message)
+			} else {
+				// broadcast to others
+				for i := range net.couts {
+					if i != r.sender {
+						net.sendToNode(i, r.message)
+					}
+				}
+			}
+		}
+	}()
 
-	return network, nil
+	return net, nil
 }
 
 // sendToNode sends one message to one receiver
-func (net *dummyNetwork) sendToNode(receiver int, msg *raftMessage) {
+func (net *channelNetwork) sendToNode(receiver int, msg *raftMessage) {
 	// nonblocking lossy sending using channel
-	ch := net.nodeChannels[receiver]
+	ch := net.couts[receiver]
 	select {
 	case ch <- msg:
 	default:
 	}
 }
 
-// start starts the dummy network, monitoring for send requests and dispatch it to nodes
-func (net *dummyNetwork) start() {
-	for r := range net.chSend {
-		if r.receiver != boradcastAddress {
-			// single receiver
-			net.sendToNode(r.receiver, r.message)
-		} else {
-			// broadcast to others
-			for i := range net.nodeChannels {
-				if i != r.sender {
-					net.sendToNode(i, r.message)
-				}
-			}
-		}
-	}
-}
-
 // Send sends a message from the source node to target node
-func (net *dummyNetwork) Send(sourceNodeID int, targetNodeID int, msg *raftMessage) error {
+func (net *channelNetwork) Send(sourceNodeID int, targetNodeID int, msg *raftMessage) error {
 	switch {
 	case sourceNodeID > net.size:
 		return errorInvalidNodeID
@@ -98,19 +95,19 @@ func (net *dummyNetwork) Send(sourceNodeID int, targetNodeID int, msg *raftMessa
 		return errorInvalidMessage
 	}
 
-	req := dummyNetworkRequest{
+	req := channelNetworkReq{
 		sender:   sourceNodeID,
 		receiver: targetNodeID,
 		message:  msg,
 	}
 
-	net.chSend <- req
+	net.cin <- req
 
 	return nil
 }
 
 // Broadcast a message to all other nodes
-func (net *dummyNetwork) Broadcast(sourceNodeID int, msg *raftMessage) error {
+func (net *channelNetwork) Broadcast(sourceNodeID int, msg *raftMessage) error {
 	switch {
 	case sourceNodeID > net.size:
 		return errorInvalidNodeID
@@ -118,22 +115,22 @@ func (net *dummyNetwork) Broadcast(sourceNodeID int, msg *raftMessage) error {
 		return errorInvalidMessage
 	}
 
-	req := dummyNetworkRequest{
+	req := channelNetworkReq{
 		sender:   sourceNodeID,
 		receiver: boradcastAddress,
 		message:  msg,
 	}
 
-	net.chSend <- req
+	net.cin <- req
 
 	return nil
 }
 
 // GetRecvChannel returns the receiving channel for the given node
-func (net *dummyNetwork) GetRecvChannel(nodeID int) (chan *raftMessage, error) {
+func (net *channelNetwork) GetRecvChannel(nodeID int) (chan *raftMessage, error) {
 	if nodeID > net.size {
 		return nil, errorInvalidNodeID
 	}
 
-	return net.nodeChannels[nodeID], nil
+	return net.couts[nodeID], nil
 }

@@ -15,7 +15,7 @@ func raftDemo() {
 	logger := log.New(log.Writer(), log.Prefix(), log.Flags())
 
 	// Create and start a local channel based dummy network
-	network, _ := raft.CreateDummyNetwork(clusterSize)
+	network, _ := raft.CreateChannelNetwork(clusterSize)
 
 	// start a local cluster
 	fmt.Printf("Starting a %d node raft cluster\n", clusterSize)

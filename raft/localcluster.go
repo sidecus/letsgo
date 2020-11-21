@@ -12,7 +12,7 @@ type LocalCluster struct {
 }
 
 // CreateLocalCluster creates a local cluster
-func CreateLocalCluster(size int, network Network, logger *log.Logger) *LocalCluster {
+func CreateLocalCluster(size int, network INetwork, logger *log.Logger) *LocalCluster {
 	nodes := make([]INode, size)
 
 	for i := range nodes {

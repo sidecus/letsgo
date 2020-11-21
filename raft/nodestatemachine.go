@@ -12,69 +12,71 @@ const (
 // raftMsgHandler defines a message handler struct
 type raftMsgHandler struct {
 	handle               func(INode, *raftMessage) bool
-	nextState            NodeState
+	nextState            nodeState
 	electTimerAction     timerAction
 	heartbeatTimerAction timerAction
 }
 
-//raftMsgHandlerMap defines map of message type to handler
+//raftMsgHandlerMap defines map from message type to handler
 type raftMsgHandlerMap map[raftMessageType]raftMsgHandler
 
 // raftStateMachine defines map from state to MsgHandlerMap
-type raftStateMachine map[NodeState]raftMsgHandlerMap
+type raftStateMachine map[nodeState]raftMsgHandlerMap
 
-// ProcessMessage runs a message through the node state machine
+// processMessage runs a message through the node state machine
 // if message is handled and state change is required, it'll perform other needed work
 // including advancing node state and stoping/reseting related timers
-func (sm raftStateMachine) ProcessMessage(node INode, msg *raftMessage) {
-	handlerMap, validState := sm[node.State()]
-	if !validState {
+func (sm raftStateMachine) processMessage(node INode, msg *raftMessage) {
+	handlerMap, valid := sm[node.getState()]
+	if !valid {
 		panic("Invalid state for node %d")
 	}
 
-	handler, hasHandler := handlerMap[msg.msgType]
-	if hasHandler && handler.handle != nil && handler.handle(node, msg) {
+	entry, ok := handlerMap[msg.msgType]
+	if ok && entry.handle(node, msg) {
 		// set new state
-		node.SetState(handler.nextState)
+		node.setState(entry.nextState)
 
 		// update election timer
-		if handler.electTimerAction == timerActionStop {
-			node.StopElectionTimer()
-		} else if handler.electTimerAction == timerActionReset {
-			node.ResetElectionTimer()
+		switch entry.electTimerAction {
+		case timerActionStop:
+			node.stopElectionTimer()
+		case timerActionReset:
+			node.resetElectionTimer()
 		}
 
 		// update heartbreat timer
-		if handler.heartbeatTimerAction == timerActionStop {
-			node.StopHeartbeatTimer()
-		} else if handler.heartbeatTimerAction == timerActionReset {
-			node.ResetHeartbeatTimer()
+		switch entry.heartbeatTimerAction {
+		case timerActionStop:
+			node.stopHeartbeatTimer()
+		case timerActionReset:
+			node.resetHeartbeatTimer()
 		}
 	}
 }
 
 func handleStartElection(node INode, msg *raftMessage) bool {
-	return node.StartElection()
+	return node.startElection()
 }
 
 func handleSendHearbeat(node INode, msg *raftMessage) bool {
-	return node.SendHeartbeat()
+	return node.sendHeartbeat()
 }
 
 func handleHeartbeat(node INode, msg *raftMessage) bool {
-	return node.AckHeartbeat(msg)
+	return node.ackHeartbeat(msg)
 }
 
 func handleVoteMsg(node INode, msg *raftMessage) bool {
-	return node.CountVotes(msg)
+	return node.countVotes(msg)
 }
 
 func handleRequestVoteMsg(node INode, msg *raftMessage) bool {
-	return node.Vote(msg)
+	return node.vote(msg)
 }
 
-// raftNodeSM is the predefined node state machine
-var raftNodeSM = raftStateMachine{
+// raftSM is the predefined node state machine, it manages raft node state transition
+var raftSM = raftStateMachine{
 	follower: {
 		MsgStartElection: {
 			handle:               handleStartElection,

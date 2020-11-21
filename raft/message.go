@@ -20,7 +20,7 @@ type raftMessage struct {
 	data    int
 }
 
-func (node *Node) createRequestVoteMessage() *raftMessage {
+func (node *raftNode) createRequestVoteMessage() *raftMessage {
 	return &raftMessage{
 		nodeID:  node.id,
 		term:    node.term,
@@ -29,7 +29,7 @@ func (node *Node) createRequestVoteMessage() *raftMessage {
 	}
 }
 
-func (node *Node) createStartElectionMessage() *raftMessage {
+func (node *raftNode) createStartElectionMessage() *raftMessage {
 	return &raftMessage{
 		nodeID:  node.id,
 		term:    node.term,
@@ -38,7 +38,7 @@ func (node *Node) createStartElectionMessage() *raftMessage {
 	}
 }
 
-func (node *Node) createVoteMessage(electMsg *raftMessage) *raftMessage {
+func (node *raftNode) createVoteMessage(electMsg *raftMessage) *raftMessage {
 	return &raftMessage{
 		nodeID:  node.id,
 		term:    electMsg.term,
@@ -47,7 +47,7 @@ func (node *Node) createVoteMessage(electMsg *raftMessage) *raftMessage {
 	}
 }
 
-func (node *Node) createHeartBeatMessage() *raftMessage {
+func (node *raftNode) createHeartBeatMessage() *raftMessage {
 	return &raftMessage{
 		nodeID:  node.id,
 		term:    node.term,
@@ -56,7 +56,7 @@ func (node *Node) createHeartBeatMessage() *raftMessage {
 	}
 }
 
-func (node *Node) createSendHeartBeatMessage() *raftMessage {
+func (node *raftNode) createSendHeartBeatMessage() *raftMessage {
 	return &raftMessage{
 		nodeID:  node.id,
 		term:    node.term,

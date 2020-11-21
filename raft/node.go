@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// NodeState - node state type, can be one of 3: follower, candidate or leader
-type NodeState int
+// nodeState - node state type, can be one of 3: follower, candidate or leader
+type nodeState int
 
 // NodeState allowed values
 const (
@@ -19,32 +19,35 @@ const (
 
 // INode defines the interface for a node
 type INode interface {
-	State() NodeState
-	SetState(newState NodeState) NodeState
+	getState() nodeState
+	setState(newState nodeState) nodeState
 
-	StopElectionTimer()
-	ResetElectionTimer()
-	StopHeartbeatTimer()
-	ResetHeartbeatTimer()
+	stopElectionTimer()
+	resetElectionTimer()
+	stopHeartbeatTimer()
+	resetHeartbeatTimer()
 
-	StartElection() bool
-	Vote(electMsg *raftMessage) bool
-	CountVotes(ballotMsg *raftMessage) bool
-	AckHeartbeat(hbMsg *raftMessage) bool
-	SendHeartbeat() bool
+	startElection() bool
+	vote(electMsg *raftMessage) bool
+	countVotes(ballotMsg *raftMessage) bool
+	ackHeartbeat(hbMsg *raftMessage) bool
+	sendHeartbeat() bool
 
+	// Start starts the raft node event loop.
+	// If a WaitGroup parameter is given, it'll be signaled when the event loop finishes
+	// Usually this should be called in its own go routine
 	Start(wg *sync.WaitGroup)
 }
 
-const minElectionTimeoutMs = 3500                     // millisecond
-const maxElectionTimeoutMs = 5000                     // millisecond
-const heartbeatTimeoutMs = minElectionTimeoutMs + 100 // millisecond, larger value so that we can mimic some failures
+const minElectionTimeoutMs = 3500                    // millisecond
+const maxElectionTimeoutMs = 5000                    // millisecond
+const heartbeatTimeoutMs = minElectionTimeoutMs + 20 // millisecond, larger value so that we can mimic some failures
 
-// Node represents a raft node
-type Node struct {
+// raftNode represents a raft node
+type raftNode struct {
 	id            int
 	term          int
-	state         NodeState
+	state         nodeState
 	lastVotedTerm int
 	votes         []bool
 	size          int
@@ -53,19 +56,19 @@ type Node struct {
 	heartbeatTimer *time.Timer // timer for heartbeat, used by leader
 
 	stateMachine raftStateMachine
-	network      Network // underlying network implementation for sending/receiving messages
+	network      INetwork // underlying network implementation for sending/receiving messages
 	logger       *log.Logger
 }
 
 // CreateNode creates a new raft node
-func CreateNode(id int, size int, network Network, logger *log.Logger) INode {
-	// Initialize timer objects (stopped immediately)
+func CreateNode(id int, size int, network INetwork, logger *log.Logger) INode {
+	// Create timer objects (stopped)
 	electionTimer := time.NewTimer(time.Hour)
-	electionTimer.Stop()
+	stopTimer(electionTimer)
 	heartbeatTimer := time.NewTimer(time.Hour)
-	heartbeatTimer.Stop()
+	stopTimer(heartbeatTimer)
 
-	return &Node{
+	return &raftNode{
 		id:            id,
 		term:          0,
 		state:         follower,
@@ -76,61 +79,47 @@ func CreateNode(id int, size int, network Network, logger *log.Logger) INode {
 		electionTimer:  electionTimer,
 		heartbeatTimer: heartbeatTimer,
 
-		stateMachine: raftNodeSM,
+		stateMachine: raftSM,
 		network:      network,
 		logger:       logger,
 	}
 }
 
-// getElectionTimeout gets a new random election timeout
-func (node *Node) getElectionTimeout() time.Duration {
-	timeout := rand.Intn(maxElectionTimeoutMs-minElectionTimeoutMs) + minElectionTimeoutMs
-	return time.Duration(timeout) * time.Millisecond
-}
-
-// processMessage passes the message through the node statemachine
-// it returns a signal about whether the node should stop
-func (node *Node) processMessage(msg *raftMessage) bool {
-	node.stateMachine.ProcessMessage(node, msg)
-	return false
-}
-
-// State returns the node's current state
-func (node *Node) State() NodeState {
+// getState returns the node's current state
+func (node *raftNode) getState() nodeState {
 	return node.state
 }
 
-// SetState changes the node's state
-func (node *Node) SetState(newState NodeState) NodeState {
+// setState changes the node's state
+func (node *raftNode) setState(newState nodeState) nodeState {
 	oldState := node.state
 	node.state = newState
 	return oldState
 }
 
-// StopElectionTimer stops the election timer for the node
-func (node *Node) StopElectionTimer() {
+// stopElectionTimer stops the election timer for the node
+func (node *raftNode) stopElectionTimer() {
 	stopTimer(node.electionTimer)
 }
 
-// ResetElectionTimer resets the election timer for the node
-func (node *Node) ResetElectionTimer() {
-	stopTimer(node.electionTimer)
-	node.electionTimer.Reset(node.getElectionTimeout())
+// resetElectionTimer resets the election timer for the node
+func (node *raftNode) resetElectionTimer() {
+	timeout := rand.Intn(maxElectionTimeoutMs-minElectionTimeoutMs) + minElectionTimeoutMs
+	resetTimer(node.electionTimer, time.Duration(timeout)*time.Millisecond)
 }
 
-// StopHeartbeatTimer stops the heart beat timer (none leader scenario)
-func (node *Node) StopHeartbeatTimer() {
+// stopHeartbeatTimer stops the heart beat timer (none leader scenario)
+func (node *raftNode) stopHeartbeatTimer() {
 	stopTimer(node.heartbeatTimer)
 }
 
-// ResetHeartbeatTimer resets the heart beat timer for the leader
-func (node *Node) ResetHeartbeatTimer() {
-	stopTimer(node.heartbeatTimer)
-	node.heartbeatTimer.Reset(time.Duration(heartbeatTimeoutMs) * time.Millisecond)
+// resetHeartbeatTimer resets the heart beat timer for the leader
+func (node *raftNode) resetHeartbeatTimer() {
+	resetTimer(node.heartbeatTimer, time.Duration(heartbeatTimeoutMs)*time.Millisecond)
 }
 
-// StartElection starts an election and elect self
-func (node *Node) StartElection() bool {
+// startElection starts an election and elect self
+func (node *raftNode) startElection() bool {
 	// set new candidate term
 	node.term++
 
@@ -153,8 +142,8 @@ func (node *Node) StartElection() bool {
 	return true
 }
 
-// Vote for newer term and when we haven't voted for it yet
-func (node *Node) Vote(electMsg *raftMessage) bool {
+// vote for newer term and when we haven't voted for it yet
+func (node *raftNode) vote(electMsg *raftMessage) bool {
 	if electMsg.term > node.term && electMsg.term > node.lastVotedTerm {
 		node.lastVotedTerm = electMsg.term
 		node.logger.Printf("\U0001f4e7 T%d: Node%d votes for Node%d \n", electMsg.term, node.id, electMsg.nodeID)
@@ -165,8 +154,8 @@ func (node *Node) Vote(electMsg *raftMessage) bool {
 	return false
 }
 
-// CountVotes counts votes received and decide whether we win
-func (node *Node) CountVotes(ballotMsg *raftMessage) bool {
+// countVotes counts votes received and decide whether we win
+func (node *raftNode) countVotes(ballotMsg *raftMessage) bool {
 	if ballotMsg.data == node.id && ballotMsg.term == node.term {
 		node.votes[ballotMsg.nodeID] = true
 
@@ -179,8 +168,8 @@ func (node *Node) CountVotes(ballotMsg *raftMessage) bool {
 
 		if totalVotes > node.size/2 {
 			// Won election, start heartbeat
-			node.logger.Printf("\u2705 T%d: Node%d wins election\n", node.term, node.id)
-			node.SendHeartbeat()
+			node.logger.Printf("\U0001f451 T%d: Node%d won election\n", node.term, node.id)
+			node.sendHeartbeat()
 			return true
 		}
 	}
@@ -188,8 +177,8 @@ func (node *Node) CountVotes(ballotMsg *raftMessage) bool {
 	return false
 }
 
-// AckHeartbeat acks a heartbeat message
-func (node *Node) AckHeartbeat(hbMsg *raftMessage) bool {
+// ackHeartbeat acks a heartbeat message
+func (node *raftNode) ackHeartbeat(hbMsg *raftMessage) bool {
 	// handle heartbeat message with the same or newer term
 	if hbMsg.term >= node.term {
 		node.logger.Printf("\U0001f493 T%d: Node%d <- Node%d\n", hbMsg.term, node.id, hbMsg.nodeID)
@@ -200,17 +189,26 @@ func (node *Node) AckHeartbeat(hbMsg *raftMessage) bool {
 	return false
 }
 
-// SendHeartbeat sends a heartbeat message
-func (node *Node) SendHeartbeat() bool {
+// sendHeartbeat sends a heartbeat message
+func (node *raftNode) sendHeartbeat() bool {
 	node.network.Broadcast(node.id, node.createHeartBeatMessage())
 	return true
 }
 
-// Start starts a node
-func (node *Node) Start(wg *sync.WaitGroup) {
+// processMessage passes the message through the node statemachine
+// it returns a signal about whether the node should stop
+func (node *raftNode) processMessage(msg *raftMessage) bool {
+	node.stateMachine.processMessage(node, msg)
+	return false
+}
+
+// Start starts the raft node event loop.
+// If a WaitGroup parameter is given, it'll be signaled when the event loop finishes
+// Usually this should be called in its own go routine
+func (node *raftNode) Start(wg *sync.WaitGroup) {
 	node.logger.Printf("Node%d starting...\n", node.id)
 
-	node.ResetElectionTimer()
+	node.resetElectionTimer()
 
 	var msg *raftMessage
 	quit := false
