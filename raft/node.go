@@ -52,9 +52,9 @@ type Node struct {
 	electionTimer  *time.Timer // timer for election timeout, used by follower and candidate
 	heartbeatTimer *time.Timer // timer for heartbeat, used by leader
 
-	sm      nodeStateMachine
-	network Network // underlying network implementation for sending/receiving messages
-	logger  *log.Logger
+	stateMachine raftStateMachine
+	network      Network // underlying network implementation for sending/receiving messages
+	logger       *log.Logger
 }
 
 // CreateNode creates a new raft node
@@ -76,9 +76,9 @@ func CreateNode(id int, size int, network Network, logger *log.Logger) INode {
 		electionTimer:  electionTimer,
 		heartbeatTimer: heartbeatTimer,
 
-		sm:      raftNodeSM,
-		network: network,
-		logger:  logger,
+		stateMachine: raftNodeSM,
+		network:      network,
+		logger:       logger,
 	}
 }
 
@@ -89,9 +89,9 @@ func (node *Node) getElectionTimeout() time.Duration {
 }
 
 // processMessage passes the message through the node statemachine
-// it returns a signal about whether we should quit
+// it returns a signal about whether the node should stop
 func (node *Node) processMessage(msg *raftMessage) bool {
-	node.sm.ProcessMessage(node, msg)
+	node.stateMachine.ProcessMessage(node, msg)
 	return false
 }
 

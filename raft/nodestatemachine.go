@@ -20,14 +20,14 @@ type raftMsgHandler struct {
 //raftMsgHandlerMap defines map of message type to handler
 type raftMsgHandlerMap map[raftMessageType]raftMsgHandler
 
-// nodeStateMachine defines map from state to MsgHandlerMap
-type nodeStateMachine map[NodeState]raftMsgHandlerMap
+// raftStateMachine defines map from state to MsgHandlerMap
+type raftStateMachine map[NodeState]raftMsgHandlerMap
 
 // ProcessMessage runs a message through the node state machine
 // if message is handled and state change is required, it'll perform other needed work
 // including advancing node state and stoping/reseting related timers
-func (nodesm nodeStateMachine) ProcessMessage(node INode, msg *raftMessage) {
-	handlerMap, validState := nodesm[node.State()]
+func (sm raftStateMachine) ProcessMessage(node INode, msg *raftMessage) {
+	handlerMap, validState := sm[node.State()]
 	if !validState {
 		panic("Invalid state for node %d")
 	}
@@ -74,7 +74,7 @@ func handleRequestVoteMsg(node INode, msg *raftMessage) bool {
 }
 
 // raftNodeSM is the predefined node state machine
-var raftNodeSM = nodeStateMachine{
+var raftNodeSM = raftStateMachine{
 	follower: {
 		MsgStartElection: {
 			handle:               handleStartElection,
