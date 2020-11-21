@@ -3,6 +3,7 @@ package raft
 import (
 	"log"
 	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -32,7 +33,7 @@ type INode interface {
 	AckHeartbeat(hbMsg *raftMessage) bool
 	SendHeartbeat() bool
 
-	Start()
+	Start(wg *sync.WaitGroup)
 }
 
 const minElectionTimeoutMs = 3500                     // millisecond
@@ -46,43 +47,38 @@ type Node struct {
 	state         NodeState
 	lastVotedTerm int
 	votes         []bool
+	size          int
 
 	electionTimer  *time.Timer // timer for election timeout, used by follower and candidate
 	heartbeatTimer *time.Timer // timer for heartbeat, used by leader
 
-	sm          nodeStateMachine
-	recvChannel chan *raftMessage
-	cluster     *Cluster
-	network     Network // underlying network implementation for sending/receiving messages
-	logger      *log.Logger
+	sm      nodeStateMachine
+	network Network // underlying network implementation for sending/receiving messages
+	logger  *log.Logger
 }
 
 // CreateNode creates a new raft node
-func CreateNode(id int, cluster *Cluster, network Network, logger *log.Logger) INode {
+func CreateNode(id int, size int, network Network, logger *log.Logger) INode {
 	// Initialize timer objects (stopped immediately)
 	electionTimer := time.NewTimer(time.Hour)
 	electionTimer.Stop()
 	heartbeatTimer := time.NewTimer(time.Hour)
 	heartbeatTimer.Stop()
 
-	recvCh, err := network.GetRecvChannel(id)
-	if err != nil {
-		panic("failed to get receiving channel for node")
-	}
-
 	return &Node{
-		cluster:        cluster,
-		id:             id,
-		term:           0,
-		lastVotedTerm:  0,
-		votes:          make([]bool, cluster.size),
-		state:          follower,
+		id:            id,
+		term:          0,
+		state:         follower,
+		lastVotedTerm: 0,
+		votes:         make([]bool, size),
+		size:          size,
+
 		electionTimer:  electionTimer,
 		heartbeatTimer: heartbeatTimer,
-		recvChannel:    recvCh,
-		sm:             raftNodeSM,
-		network:        network,
-		logger:         logger,
+
+		sm:      raftNodeSM,
+		network: network,
+		logger:  logger,
 	}
 }
 
@@ -93,8 +89,10 @@ func (node *Node) getElectionTimeout() time.Duration {
 }
 
 // processMessage passes the message through the node statemachine
-func (node *Node) processMessage(msg *raftMessage) {
+// it returns a signal about whether we should quit
+func (node *Node) processMessage(msg *raftMessage) bool {
 	node.sm.ProcessMessage(node, msg)
+	return false
 }
 
 // State returns the node's current state
@@ -179,7 +177,7 @@ func (node *Node) CountVotes(ballotMsg *raftMessage) bool {
 			}
 		}
 
-		if totalVotes > node.cluster.size/2 {
+		if totalVotes > node.size/2 {
 			// Won election, start heartbeat
 			node.logger.Printf("\u2705 T%d: Node%d wins election\n", node.term, node.id)
 			node.SendHeartbeat()
@@ -209,28 +207,31 @@ func (node *Node) SendHeartbeat() bool {
 }
 
 // Start starts a node
-func (node *Node) Start() {
+func (node *Node) Start(wg *sync.WaitGroup) {
 	node.logger.Printf("Node%d starting...\n", node.id)
 
-	go func() {
-		node.ResetElectionTimer()
+	node.ResetElectionTimer()
 
-		var msg *raftMessage
-		msgCh, _ := node.network.GetRecvChannel(node.id)
-		electCh := node.electionTimer.C
-		hbCh := node.heartbeatTimer.C
+	var msg *raftMessage
+	quit := false
+	msgCh, _ := node.network.GetRecvChannel(node.id)
+	electCh := node.electionTimer.C
+	hbCh := node.heartbeatTimer.C
 
-		for {
-			select {
-			case msg = <-msgCh:
-			case <-electCh:
-				msg = node.createStartElectionMessage()
-			case <-hbCh:
-				msg = node.createSendHeartBeatMessage()
-			}
-
-			// Do the real processing
-			node.processMessage(msg)
+	for !quit {
+		select {
+		case msg = <-msgCh:
+		case <-electCh:
+			msg = node.createStartElectionMessage()
+		case <-hbCh:
+			msg = node.createSendHeartBeatMessage()
 		}
-	}()
+
+		// Do the real processing
+		quit = node.processMessage(msg)
+	}
+
+	if wg != nil {
+		wg.Done()
+	}
 }
